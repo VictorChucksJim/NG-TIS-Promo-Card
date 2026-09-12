@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>NICEGENE — Create My Promo Card</title>
+<meta name="description" content="Create your personalised NICEGENE event promo card in under two minutes." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <div class="app">
+
+    <header class="app-header">
+      <img class="brand-badge" src="assets/nicegene-tis-badge.png" alt="NICEGENE Tech Insight Series" />
+      <nav class="steps" id="steps" aria-label="Progress">
+        <span class="step is-active" data-step="1">Photo</span>
+        <span class="step" data-step="2">Preview</span>
+        <span class="step" data-step="3">Download</span>
+      </nav>
+    </header>
+
+    <main id="screens">
+
+      <!-- 0. LOADING -->
+      <section class="screen is-active" id="screen-loading" data-screen="loading">
+        <div class="loader" aria-hidden="true"></div>
+        <p class="muted">Checking your registration…</p>
+      </section>
+
+      <!-- 1. WELCOME (token verified) -->
+      <section class="screen" id="screen-welcome" data-screen="welcome">
+        <h1 class="headline">Welcome, <span id="welcome-name">there</span>.</h1>
+        <p class="lede" id="welcome-copy">You're registered for the event. Let's build your card.</p>
+        <button class="btn btn-primary" id="btn-start">Continue</button>
+      </section>
+
+      <!-- 1b. FALLBACK VERIFY -->
+      <section class="screen" id="screen-verify" data-screen="verify">
+        <h1 class="headline">Verify your registration</h1>
+        <p class="lede">We couldn't recognise your link automatically. Enter your details to continue.</p>
+        <form id="verify-form" novalidate>
+          <label class="field">
+            <span>Participant ID</span>
+            <input type="text" name="participantId" placeholder="e.g. NG-014" required />
+          </label>
+          <label class="field">
+            <span>Registered email address</span>
+            <input type="email" name="email" placeholder="you@example.com" required />
+          </label>
+          <p class="field-error" id="verify-error" role="alert" hidden></p>
+          <button class="btn btn-primary" type="submit">Verify my registration</button>
+        </form>
+      </section>
+
+      <!-- 1c. INVALID / ERROR -->
+      <section class="screen" id="screen-invalid" data-screen="invalid">
+        <h1 class="headline">We couldn't verify your registration</h1>
+        <p class="lede">Please use the link from your NICEGENE confirmation email, or verify your details manually below.</p>
+        <button class="btn btn-secondary" id="btn-manual-verify">Verify manually</button>
+      </section>
+
+      <!-- 2. PHOTO UPLOAD -->
+      <section class="screen" id="screen-photo" data-screen="photo">
+        <h1 class="headline">Add your photo</h1>
+        <p class="lede">Upload a clear photo of yourself. We'll automatically resize and crop it to fit your card.</p>
+
+        <div class="upload-zone" id="upload-zone" tabindex="0" role="button" aria-label="Upload a photo">
+          <input type="file" id="file-input" accept="image/jpeg,image/png,image/webp" hidden />
+          <div class="upload-zone-inner" id="upload-empty">
+            <span class="upload-icon" aria-hidden="true">＋</span>
+            <span>Upload photo</span>
+          </div>
+        </div>
+
+        <p class="field-error" id="upload-error" role="alert" hidden></p>
+
+        <div class="upload-actions">
+          <button class="btn btn-primary" id="btn-choose-file">Upload Photo</button>
+          <button class="btn btn-secondary" id="btn-take-photo" hidden>Take a Photo</button>
+        </div>
+      </section>
+
+      <!-- 3. CROP / ADJUST -->
+      <section class="screen" id="screen-crop" data-screen="crop">
+        <h1 class="headline">Does this look good?</h1>
+        <p class="lede">Drag to reposition, or use the slider to zoom.</p>
+
+        <div class="crop-stage">
+          <canvas id="crop-canvas" width="400" height="400"></canvas>
+          <div class="crop-mask" aria-hidden="true"></div>
+        </div>
+
+        <label class="zoom-control">
+          <span>Zoom</span>
+          <input type="range" id="zoom-range" min="1" max="3" step="0.01" value="1" />
+        </label>
+
+        <div class="row-actions">
+          <button class="btn btn-tertiary" id="btn-retake">Choose a different photo</button>
+          <button class="btn btn-primary" id="btn-continue-crop">Continue</button>
+        </div>
+      </section>
+
+      <!-- 4. PREVIEW -->
+      <section class="screen" id="screen-preview" data-screen="preview">
+        <h1 class="headline">Preview your card</h1>
+        <div class="card-frame">
+          <canvas id="preview-canvas"></canvas>
+        </div>
+        <div class="row-actions">
+          <button class="btn btn-tertiary" id="btn-back-crop">Adjust photo</button>
+          <button class="btn btn-primary" id="btn-generate">Generate My Card</button>
+        </div>
+      </section>
+
+      <!-- 5. GENERATING -->
+      <section class="screen" id="screen-generating" data-screen="generating">
+        <div class="loader" aria-hidden="true"></div>
+        <p class="muted">Building your card…</p>
+      </section>
+
+      <!-- 6. SUCCESS -->
+      <section class="screen" id="screen-success" data-screen="success">
+        <h1 class="headline">Your promo card is ready!</h1>
+        <div class="card-frame">
+          <canvas id="final-canvas"></canvas>
+        </div>
+        <div class="col-actions">
+          <button class="btn btn-primary" id="btn-download">Download Card</button>
+          <button class="btn btn-secondary" id="btn-share" hidden>Share Card</button>
+          <button class="btn btn-tertiary" id="btn-again">Create another card</button>
+        </div>
+      </section>
+
+      <!-- ERROR: GENERATION FAILED -->
+      <section class="screen" id="screen-gen-error" data-screen="gen-error">
+        <h1 class="headline">We couldn't create your card this time</h1>
+        <p class="lede">This is usually temporary. Please try again.</p>
+        <button class="btn btn-primary" id="btn-retry-generate">Try again</button>
+      </section>
+
+    </main>
+
+    <footer class="app-footer">
+      <span>NICEGENE Technology Solutions Limited</span>
+    </footer>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+  <script src="js/config.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/card-renderer.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
