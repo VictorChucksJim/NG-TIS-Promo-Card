@@ -1,16 +1,7 @@
 // card-renderer.js
-// Minimalist, functional card layout — plain text and flat colour blocks,
-// no decorative gradients/pills. Verified against a PIL prototype before
-// being ported here, to catch spacing/overlap issues before they ever
-// reached the browser.
-//
-// Colours and the logo badge come from NICEGENE's own event graphics
-// (Tech Insight Series ad creatives + certificate template): navy
-// background, cyan accent, the official "NICEGENE / TECH INSIGHT SERIES"
-// lockup.
+// NICEGENE Tech Insight Series personalised promotional card renderer.
 
 const CardRenderer = (() => {
-
   const COLORS = {
     bg: "#0B1740",
     white: "#F5F7FF",
@@ -19,10 +10,15 @@ const CardRenderer = (() => {
     line: "rgba(255,255,255,0.16)"
   };
 
-  function formatDate(iso) {
-    const d = new Date(iso + "T00:00:00");
-    if (isNaN(d)) return iso;
-    return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }).toUpperCase();
+  function formatDate(config) {
+    if (config.eventDateDisplay) return config.eventDateDisplay.toUpperCase();
+    const d = new Date((config.eventDate || "") + "T00:00:00");
+    if (isNaN(d)) return config.eventDate || "";
+    return d.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "long",
+      year: "numeric"
+    }).toUpperCase();
   }
 
   function wrapText(ctx, text, maxWidth) {
@@ -42,13 +38,6 @@ const CardRenderer = (() => {
     return lines;
   }
 
-  /**
-   * Wraps text to maxWidth at the given weight/base size, then shrinks the
-   * font in 2px steps (down to minSize) if any single word is still too
-   * wide to fit — e.g. a long unhyphenated name. Prevents both the theme
-   * headline and the participant's name from ever running off the card,
-   * regardless of length.
-   */
   function fitText(ctx, text, maxWidth, weight, baseSize, minSize) {
     let size = baseSize;
     let lines = [text];
@@ -91,26 +80,12 @@ const CardRenderer = (() => {
     return badgeImgPromise;
   }
 
-  /**
-   * @param {HTMLCanvasElement} canvas
-   * @param {Object} config - event config (badgeSrc, eventCode, eventTheme,
-   *   eventDate, eventTimeDisplay, registrationUrl, phone, website, email,
-   *   cardWidth, cardHeight)
-   * @param {Object} participant - { name, organisation, role }
-   * @param {HTMLCanvasElement} photoCanvas - square cropped photo
-   */
   async function render(canvas, config, participant, photoCanvas) {
     const w = config.cardWidth;
-
-    // Card height adapts to content: a long event theme wraps to more
-    // lines, so we measure everything first and size the canvas to fit,
-    // rather than risk the footer overlapping a tall headline. Width is
-    // fixed (keeps the card a consistent shareable shape); height flexes.
     canvas.width = w;
-    canvas.height = 10; // temporary — just enough to get a 2D context for measuring
+    canvas.height = 10;
     const ctx = canvas.getContext("2d");
 
-    // --- Logo badge, top-left (measured now, drawn later) ---
     const badge = await loadBadge(config.badgeSrc);
     const badgeW = 400;
     const badgeH = badgeW * (badge.height / badge.width);
@@ -118,7 +93,6 @@ const CardRenderer = (() => {
     const dividerY = 56 + badgeH + 36;
     const labelY = dividerY + 46;
 
-    // Theme headline: wraps, and shrinks first if any word is unusually long.
     const themeFit = fitText(ctx, (config.eventTheme || "").toUpperCase(), 900, 700, 50, 32);
     const themeLines = themeFit.lines;
     const themeLineH = themeFit.size * 1.28;
@@ -129,32 +103,27 @@ const CardRenderer = (() => {
     const photoCy = metaY + 210;
     const photoSize = 380;
 
-    // Name: wraps, and shrinks if a single long name would otherwise run
-    // off the card (this was a real bug caught during testing).
     const nameFit = fitText(ctx, participant.name || "", 900, 700, 46, 28);
     const nameLines = nameFit.lines;
     const nameLineH = nameFit.size * 1.2;
     const nameTop = photoCy + photoSize / 2 + 70;
     const nameBottom = nameTop + (nameLines.length - 1) * nameLineH + nameLineH / 2;
 
-    const roleOrgParts = [participant.role, participant.organisation].filter(Boolean);
-    const roleY = roleOrgParts.length ? nameBottom + 40 : nameBottom;
+    // Participant role/organisation are intentionally omitted from the
+    // public-facing card. The participant's name is the only personal text.
     const qrSize = 160;
-    const qrTop = roleY + 100;
+    const qrTop = nameBottom + 100;
     const qrLabelY = qrTop + qrSize + 46;
     const contentBottom = qrLabelY + 40;
     const footerHeight = 90;
     const h = Math.round(contentBottom + footerHeight);
 
-    // Now that we know the real height, size the canvas and draw for real.
     canvas.height = h;
-
     ctx.fillStyle = COLORS.bg;
     ctx.fillRect(0, 0, w, h);
 
     ctx.drawImage(badge, 64, 56, badgeW, badgeH);
 
-    // --- Event code tag, top-right (plain text, no pill) ---
     ctx.textAlign = "right";
     ctx.textBaseline = "top";
     ctx.font = "700 30px Poppins, sans-serif";
@@ -164,7 +133,6 @@ const CardRenderer = (() => {
     ctx.fillStyle = COLORS.cyan;
     ctx.fillText(codeNum || "", w - 64, 96);
 
-    // --- Divider ---
     ctx.strokeStyle = COLORS.line;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -172,23 +140,19 @@ const CardRenderer = (() => {
     ctx.lineTo(w - 64, dividerY);
     ctx.stroke();
 
-    // --- "I'M ATTENDING" label ---
     ctx.font = "500 26px Poppins, sans-serif";
     ctx.fillStyle = COLORS.cyan;
     centerText(ctx, "I ' M   A T T E N D I N G", w / 2, labelY);
 
-    // --- Theme headline ---
     ctx.font = `700 ${themeFit.size}px Poppins, sans-serif`;
     ctx.fillStyle = COLORS.white;
     themeLines.forEach((l, i) => centerText(ctx, l, w / 2, themeTop + i * themeLineH));
 
-    // --- Date / time, single line ---
     ctx.font = "500 26px Poppins, sans-serif";
     ctx.fillStyle = COLORS.muted;
-    const metaText = `${formatDate(config.eventDate)}   \u00b7   ${config.eventTimeDisplay}`;
+    const metaText = `${formatDate(config)}   ·   ${config.eventTimeDisplay || ""}`;
     centerText(ctx, metaText, w / 2, metaY);
 
-    // --- Photo ---
     if (photoCanvas) {
       ctx.save();
       ctx.beginPath();
@@ -205,18 +169,10 @@ const CardRenderer = (() => {
       ctx.stroke();
     }
 
-    // --- Name / role ---
     ctx.font = `700 ${nameFit.size}px Poppins, sans-serif`;
     ctx.fillStyle = COLORS.white;
     nameLines.forEach((l, i) => centerText(ctx, l, w / 2, nameTop + i * nameLineH));
 
-    if (roleOrgParts.length) {
-      ctx.font = "400 28px Poppins, sans-serif";
-      ctx.fillStyle = COLORS.muted;
-      centerText(ctx, roleOrgParts.join(" \u00b7 "), w / 2, roleY);
-    }
-
-    // --- QR code ---
     if (window.QRious && config.registrationUrl) {
       const qrCanvas = document.createElement("canvas");
       new QRious({
@@ -237,7 +193,6 @@ const CardRenderer = (() => {
       centerText(ctx, "SCAN TO REGISTER", w / 2, qrTop + qrSize + 46);
     }
 
-    // --- Footer contact line ---
     const footerTop = h - footerHeight;
     ctx.strokeStyle = COLORS.line;
     ctx.beginPath();
