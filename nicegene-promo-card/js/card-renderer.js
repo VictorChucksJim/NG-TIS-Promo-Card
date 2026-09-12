@@ -1,32 +1,38 @@
 // card-renderer.js
-// NICEGENE Tech Insight Series personalised promotional card renderer.
+// Production NICEGENE TIS promotional-card renderer.
+// The visual template is fixed; only participant name and photo change.
+// Decorative capital-market imagery is drawn in-canvas, so the app remains
+// self-contained and generates the finished artwork automatically.
 
 const CardRenderer = (() => {
   const COLORS = {
-    bg: "#0B1740",
-    white: "#F5F7FF",
-    muted: "#9FB0DA",
-    cyan: "#2FE4E4",
+    navy: "#061535",
+    navy2: "#0A285B",
+    blue: "#0D5FC2",
+    cyan: "#36E6EA",
+    gold: "#F5C65A",
+    gold2: "#D99A24",
+    white: "#F8FBFF",
+    muted: "#AFC2E8",
     line: "rgba(255,255,255,0.16)"
   };
 
-  function formatDate(config) {
-    if (config.eventDateDisplay) return config.eventDateDisplay.toUpperCase();
-    const d = new Date((config.eventDate || "") + "T00:00:00");
-    if (isNaN(d)) return config.eventDate || "";
-    return d.toLocaleDateString("en-GB", {
-      day: "numeric",
-      month: "long",
-      year: "numeric"
-    }).toUpperCase();
+  function roundedRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
   }
 
   function wrapText(ctx, text, maxWidth) {
-    const words = text.split(" ");
+    const words = text.split(/\s+/);
     const lines = [];
     let line = "";
     for (const word of words) {
-      const test = line ? line + " " + word : word;
+      const test = line ? `${line} ${word}` : word;
       if (ctx.measureText(test).width > maxWidth && line) {
         lines.push(line);
         line = word;
@@ -51,20 +57,17 @@ const CardRenderer = (() => {
     return { lines, size };
   }
 
-  function centerText(ctx, text, cx, cy) {
+  function centerText(ctx, text, x, y) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(text, cx, cy);
+    ctx.fillText(text, x, y);
   }
 
-  function roundedRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
+  function formatDate(config) {
+    if (config.eventDateDisplay) return config.eventDateDisplay.toUpperCase();
+    const d = new Date(`${config.eventDate || ""}T00:00:00`);
+    if (isNaN(d)) return config.eventDate || "";
+    return d.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" }).toUpperCase();
   }
 
   let badgeImgPromise = null;
@@ -80,135 +83,287 @@ const CardRenderer = (() => {
     return badgeImgPromise;
   }
 
-  async function render(canvas, config, participant, photoCanvas) {
-    const w = config.cardWidth;
-    canvas.width = w;
-    canvas.height = 10;
-    const ctx = canvas.getContext("2d");
-
-    const badge = await loadBadge(config.badgeSrc);
-    const badgeW = 400;
-    const badgeH = badgeW * (badge.height / badge.width);
-
-    const dividerY = 56 + badgeH + 36;
-    const labelY = dividerY + 46;
-
-    const themeFit = fitText(ctx, (config.eventTheme || "").toUpperCase(), 900, 700, 50, 32);
-    const themeLines = themeFit.lines;
-    const themeLineH = themeFit.size * 1.28;
-    const themeTop = labelY + 60;
-    const themeBottom = themeTop + (themeLines.length - 1) * themeLineH + themeLineH / 2;
-
-    const metaY = themeBottom + 46;
-    const photoCy = metaY + 210;
-    const photoSize = 380;
-
-    const nameFit = fitText(ctx, participant.name || "", 900, 700, 46, 28);
-    const nameLines = nameFit.lines;
-    const nameLineH = nameFit.size * 1.2;
-    const nameTop = photoCy + photoSize / 2 + 70;
-    const nameBottom = nameTop + (nameLines.length - 1) * nameLineH + nameLineH / 2;
-
-    // Participant role/organisation are intentionally omitted from the
-    // public-facing card. The participant's name is the only personal text.
-    const qrSize = 160;
-    const qrTop = nameBottom + 100;
-    const qrLabelY = qrTop + qrSize + 46;
-    const contentBottom = qrLabelY + 40;
-    const footerHeight = 90;
-    const h = Math.round(contentBottom + footerHeight);
-
-    canvas.height = h;
-    ctx.fillStyle = COLORS.bg;
+  function drawBackground(ctx, w, h) {
+    const bg = ctx.createLinearGradient(0, 0, w, h);
+    bg.addColorStop(0, COLORS.navy);
+    bg.addColorStop(0.48, COLORS.navy2);
+    bg.addColorStop(1, "#0870C8");
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, w, h);
 
-    ctx.drawImage(badge, 64, 56, badgeW, badgeH);
+    const glow = ctx.createRadialGradient(w * 0.88, h * 0.22, 20, w * 0.88, h * 0.22, 520);
+    glow.addColorStop(0, "rgba(54,230,234,0.34)");
+    glow.addColorStop(0.55, "rgba(54,230,234,0.08)");
+    glow.addColorStop(1, "rgba(54,230,234,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, w, h);
 
-    ctx.textAlign = "right";
-    ctx.textBaseline = "top";
-    ctx.font = "700 30px Poppins, sans-serif";
-    const [codeWord, codeNum] = (config.eventCode || "").split(" ");
-    ctx.fillStyle = COLORS.white;
-    ctx.fillText(codeWord || "", w - 64, 56);
-    ctx.fillStyle = COLORS.cyan;
-    ctx.fillText(codeNum || "", w - 64, 96);
+    ctx.save();
+    ctx.globalAlpha = 0.07;
+    ctx.strokeStyle = COLORS.cyan;
+    ctx.lineWidth = 1;
+    for (let x = -h; x < w + h; x += 46) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x + h * 0.34, h);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
-    ctx.strokeStyle = COLORS.line;
-    ctx.lineWidth = 2;
+  function drawMarketScene(ctx) {
+    ctx.save();
+    ctx.globalAlpha = 0.26;
+
+    const buildings = [
+      [690, 570, 82, 610], [780, 500, 70, 680], [858, 390, 88, 790],
+      [956, 455, 64, 725], [1026, 330, 54, 850]
+    ];
+    buildings.forEach(([x, y, bw, bh], i) => {
+      const g = ctx.createLinearGradient(x, y, x, y + bh);
+      g.addColorStop(0, "rgba(120,205,255,0.9)");
+      g.addColorStop(1, "rgba(20,75,150,0.08)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, bw, bh);
+      ctx.fillStyle = "rgba(220,245,255,0.34)";
+      for (let wy = y + 28; wy < y + bh - 15; wy += 42) {
+        for (let wx = x + 14; wx < x + bw - 10; wx += 24) {
+          if ((wx + wy + i) % 3 !== 0) ctx.fillRect(wx, wy, 7, 12);
+        }
+      }
+    });
+
+    const bars = [70, 110, 155, 205, 260, 330];
+    const baseY = 1220;
+    bars.forEach((bar, i) => {
+      const x = 690 + i * 48;
+      const y = baseY - bar;
+      const grad = ctx.createLinearGradient(0, y, 0, baseY);
+      grad.addColorStop(0, "rgba(54,230,234,0.8)");
+      grad.addColorStop(1, "rgba(54,230,234,0.08)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y, 30, bar);
+    });
+
+    ctx.strokeStyle = "rgba(245,198,90,0.95)";
+    ctx.lineWidth = 13;
+    ctx.lineJoin = "round";
     ctx.beginPath();
-    ctx.moveTo(64, dividerY);
-    ctx.lineTo(w - 64, dividerY);
+    ctx.moveTo(680, 1200);
+    ctx.lineTo(760, 1130);
+    ctx.lineTo(815, 1160);
+    ctx.lineTo(880, 1010);
+    ctx.lineTo(935, 1045);
+    ctx.lineTo(1030, 875);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(1000, 875);
+    ctx.lineTo(1030, 875);
+    ctx.lineTo(1028, 907);
     ctx.stroke();
 
-    ctx.font = "500 26px Poppins, sans-serif";
+    for (let i = 0; i < 4; i++) {
+      const y = 1190 - i * 24;
+      ctx.fillStyle = i % 2 ? COLORS.gold2 : COLORS.gold;
+      ctx.beginPath();
+      ctx.ellipse(935, y, 64, 19, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,245,190,0.55)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawRibbon(ctx, w, h) {
+    ctx.save();
+    const g = ctx.createLinearGradient(0, 0, w, 0);
+    g.addColorStop(0, COLORS.gold2);
+    g.addColorStop(0.5, COLORS.gold);
+    g.addColorStop(1, "#FFE29A");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(0, h - 440);
+    ctx.lineTo(430, h - 185);
+    ctx.lineTo(0, h - 285);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.globalAlpha = 0.55;
     ctx.fillStyle = COLORS.cyan;
-    centerText(ctx, "I ' M   A T T E N D I N G", w / 2, labelY);
+    ctx.beginPath();
+    ctx.moveTo(0, h - 470);
+    ctx.lineTo(385, h - 245);
+    ctx.lineTo(0, h - 355);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
 
-    ctx.font = `700 ${themeFit.size}px Poppins, sans-serif`;
+  async function render(canvas, config, participant, photoCanvas) {
+    const w = Number(config.cardWidth) || 1080;
+    const h = Number(config.cardHeight) || 1536;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+
+    drawBackground(ctx, w, h);
+    drawMarketScene(ctx);
+    drawRibbon(ctx, w, h);
+
+    const badge = await loadBadge(config.badgeSrc);
+    const badgeW = 335;
+    const badgeH = badgeW * (badge.height / badge.width);
+    ctx.drawImage(badge, 68, 54, badgeW, badgeH);
+
+    roundedRect(ctx, 860, 54, 145, 145, 22);
+    ctx.fillStyle = "rgba(5,22,53,0.64)";
+    ctx.fill();
+    ctx.strokeStyle = COLORS.gold;
+    ctx.lineWidth = 2;
+    ctx.stroke();
     ctx.fillStyle = COLORS.white;
-    themeLines.forEach((l, i) => centerText(ctx, l, w / 2, themeTop + i * themeLineH));
+    ctx.font = "700 28px Poppins, sans-serif";
+    centerText(ctx, "NTIS", 932, 91);
+    ctx.fillStyle = COLORS.cyan;
+    ctx.font = "700 43px Poppins, sans-serif";
+    centerText(ctx, "002", 932, 138);
+    ctx.fillStyle = COLORS.gold;
+    ctx.fillRect(905, 171, 55, 5);
 
-    ctx.font = "500 26px Poppins, sans-serif";
+    ctx.fillStyle = COLORS.white;
+    ctx.font = "400 25px Poppins, sans-serif";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ["Ideas.", "Insights.", "Real-World", "Impact."].forEach((t, i) => {
+      ctx.fillText(t, 1005, 250 + i * 36);
+    });
+
+    ctx.fillStyle = COLORS.cyan;
+    ctx.font = "600 27px Poppins, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("I'M ATTENDING", 82, 360);
+
+    const rawTheme = config.eventTheme || "";
+    const colon = rawTheme.indexOf(":");
+    const lead = colon >= 0 ? rawTheme.slice(0, colon + 1).toUpperCase() : rawTheme.toUpperCase();
+    const rest = colon >= 0 ? rawTheme.slice(colon + 1).trim() : "";
+
+    ctx.fillStyle = COLORS.gold;
+    const leadFit = fitText(ctx, lead, 900, 700, 70, 46);
+    ctx.font = `700 ${leadFit.size}px Poppins, sans-serif`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText(leadFit.lines[0], 80, 410);
+
+    ctx.fillStyle = COLORS.white;
+    const restFit = fitText(ctx, rest, 880, 600, 50, 34);
+    ctx.font = `600 ${restFit.size}px Poppins, sans-serif`;
+    restFit.lines.forEach((line, i) => ctx.fillText(line, 82, 500 + i * (restFit.size * 1.18)));
+
+    const detailsY = 650;
+    ctx.strokeStyle = COLORS.gold;
+    ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(82, detailsY);
+    ctx.lineTo(165, detailsY);
+    ctx.stroke();
+
+    ctx.fillStyle = COLORS.white;
+    ctx.font = "700 31px Poppins, sans-serif";
+    ctx.fillText(formatDate(config), 82, detailsY + 35);
+    ctx.fillStyle = COLORS.cyan;
+    ctx.font = "600 31px Poppins, sans-serif";
+    ctx.fillText(config.eventTimeDisplay || "8:00 PM", 82, detailsY + 83);
     ctx.fillStyle = COLORS.muted;
-    const metaText = `${formatDate(config)}   ·   ${config.eventTimeDisplay || ""}`;
-    centerText(ctx, metaText, w / 2, metaY);
+    ctx.font = "400 23px Poppins, sans-serif";
+    ctx.fillText("WAT", 82, detailsY + 123);
 
+    const photoX = 625;
+    const photoY = 805;
+    const photoSize = 390;
     if (photoCanvas) {
       ctx.save();
       ctx.beginPath();
-      ctx.arc(w / 2, photoCy, photoSize / 2, 0, Math.PI * 2);
-      ctx.closePath();
+      ctx.arc(photoX, photoY, photoSize / 2, 0, Math.PI * 2);
       ctx.clip();
-      ctx.drawImage(photoCanvas, w / 2 - photoSize / 2, photoCy - photoSize / 2, photoSize, photoSize);
+      ctx.drawImage(photoCanvas, photoX - photoSize / 2, photoY - photoSize / 2, photoSize, photoSize);
       ctx.restore();
 
+      const ring = ctx.createLinearGradient(photoX - 200, photoY - 200, photoX + 200, photoY + 200);
+      ring.addColorStop(0, COLORS.cyan);
+      ring.addColorStop(0.5, COLORS.white);
+      ring.addColorStop(1, COLORS.gold);
       ctx.beginPath();
-      ctx.arc(w / 2, photoCy, photoSize / 2 + 3, 0, Math.PI * 2);
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = COLORS.cyan;
+      ctx.arc(photoX, photoY, photoSize / 2 + 8, 0, Math.PI * 2);
+      ctx.lineWidth = 8;
+      ctx.strokeStyle = ring;
       ctx.stroke();
     }
 
-    ctx.font = `700 ${nameFit.size}px Poppins, sans-serif`;
+    const nameFit = fitText(ctx, participant.name || "", 620, 700, 58, 36);
     ctx.fillStyle = COLORS.white;
-    nameLines.forEach((l, i) => centerText(ctx, l, w / 2, nameTop + i * nameLineH));
+    ctx.font = `700 ${nameFit.size}px Poppins, sans-serif`;
+    nameFit.lines.forEach((line, i) => centerText(ctx, line, photoX, 1040 + i * nameFit.size * 1.12));
 
+    const qrSize = 190;
+    const qrTop = 1140;
+    const qrX = 118;
     if (window.QRious && config.registrationUrl) {
       const qrCanvas = document.createElement("canvas");
       new QRious({
         element: qrCanvas,
         value: config.registrationUrl,
         size: qrSize,
-        background: COLORS.white,
-        foreground: COLORS.bg,
+        background: "#FFFFFF",
+        foreground: COLORS.navy,
         level: "M"
       });
+      roundedRect(ctx, qrX - 18, qrTop - 18, qrSize + 36, qrSize + 36, 20);
       ctx.fillStyle = COLORS.white;
-      roundedRect(ctx, w / 2 - qrSize / 2 - 14, qrTop - 14, qrSize + 28, qrSize + 28, 16);
       ctx.fill();
-      ctx.drawImage(qrCanvas, w / 2 - qrSize / 2, qrTop, qrSize, qrSize);
-
-      ctx.font = "500 22px Poppins, sans-serif";
-      ctx.fillStyle = COLORS.muted;
-      centerText(ctx, "SCAN TO REGISTER", w / 2, qrTop + qrSize + 46);
+      ctx.drawImage(qrCanvas, qrX, qrTop, qrSize, qrSize);
     }
 
-    const footerTop = h - footerHeight;
-    ctx.strokeStyle = COLORS.line;
+    // Prominent, clean CTA replacing the handwritten treatment.
+    ctx.fillStyle = COLORS.gold;
+    ctx.font = "700 43px Poppins, sans-serif";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    ctx.fillText("REGISTER", 370, 1165);
+    ctx.fillStyle = COLORS.white;
+    ctx.font = "600 30px Poppins, sans-serif";
+    ctx.fillText("FOR NTIS 002", 370, 1218);
+    ctx.fillStyle = COLORS.muted;
+    ctx.font = "400 23px Poppins, sans-serif";
+    ctx.fillText("Scan the QR code to register", 370, 1270);
+
+    ctx.fillStyle = "rgba(248,251,255,0.72)";
+    ctx.font = "500 19px Poppins, sans-serif";
+    ctx.textAlign = "right";
+    ["CAPITAL MARKETS", "INVESTMENT", "INNOVATION", "SUSTAINABILITY"].forEach((t, i) => {
+      ctx.fillText(t, 1000, 1110 + i * 32);
+    });
+
+    const footerTop = h - 82;
+    ctx.fillStyle = "rgba(3,15,40,0.88)";
+    ctx.fillRect(0, footerTop, w, 82);
+    ctx.strokeStyle = "rgba(54,230,234,0.35)";
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(0, footerTop);
     ctx.lineTo(w, footerTop);
     ctx.stroke();
 
-    ctx.font = "500 22px Poppins, sans-serif";
     ctx.fillStyle = COLORS.white;
-    const footerY = footerTop + 45;
+    ctx.font = "500 19px Poppins, sans-serif";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(config.phone || "", 50, footerY);
-    centerText(ctx, config.website || "", w / 2, footerY);
+    ctx.fillText(config.website || "www.nicegeneco.com.ng", 42, footerTop + 41);
+    centerText(ctx, "LEARN  |  CONNECT  |  GROW", w / 2, footerTop + 41);
+    ctx.fillStyle = COLORS.white;
     ctx.textAlign = "right";
-    ctx.fillText(config.email || "", w - 50, footerY);
+    ctx.fillText(config.email || "info@nicegeneco.com.ng", w - 42, footerTop + 41);
 
     return canvas;
   }
